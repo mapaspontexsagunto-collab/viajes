@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cuentas de Viaje</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2f6f5e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cuentas Viaje">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --paper:#f1ede3;
+    --paper-raised:#fbf9f4;
+    --ink:#22303a;
+    --ink-soft:#5b6b74;
+    --teal:#2f6f5e;
+    --teal-deep:#1f4d40;
+    --amber:#c98a2c;
+    --red:#a8394a;
+    --border:#ddd4bf;
+    --border-soft:#e8e1d0;
+    --shadow: 0 1px 2px rgba(34,48,58,.06), 0 6px 16px rgba(34,48,58,.06);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 10% -10%, rgba(47,111,94,.06), transparent 60%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:24px 16px 90px;
+  }
+  .wrap{max-width:880px;margin:0 auto;}
+
+  header{margin-bottom:20px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--teal-deep);font-weight:600;margin-bottom:8px;
+  }
+  h1{
+    font-family:'Fraunces',serif;font-weight:600;font-size:clamp(26px,6vw,40px);
+    margin:0 0 16px;line-height:1.05;
+  }
+
+  /* trip switcher */
+  .trip-bar{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--paper-raised);border:1px solid var(--border-soft);
+    border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);
+  }
+  .trip-bar select{flex:1;min-width:140px;font-family:'Fraunces',serif;font-style:italic;font-size:16px;}
+  .icon-btn{
+    border:1px solid var(--border);background:#fff;color:var(--ink-soft);
+    border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;font-weight:600;
+  }
+  .icon-btn:hover{background:var(--border-soft);color:var(--ink);}
+  .icon-btn.danger:hover{background:#fbe9e9;color:var(--red);border-color:#f0c9cd;}
+
+  .card{
+    background:var(--paper-raised);
+    border:1px solid var(--border-soft);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    padding:20px 18px 22px;
+    margin:20px 0;
+  }
+  .card h2{
+    font-family:'Fraunces',serif;font-weight:600;font-size:18px;margin:0 0 4px;
+  }
+  .card .hint{color:var(--ink-soft);font-size:13px;margin:0 0 16px;}
+
+  /* travelers */
+  .traveler-add{display:flex;gap:8px;margin-bottom:14px;}
+  .traveler-add input{flex:1;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    display:flex;align-items:center;gap:8px;
+    background:#fff;border:1px solid var(--border);
+    padding:6px 8px 6px 14px;border-radius:999px;font-size:14px;font-weight:500;
+  }
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0;}
+  .chip button{
+    border:none;background:var(--border-soft);color:var(--ink-soft);
+    width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:12px;line-height:1;
+  }
+  .chip button:hover{background:var(--red);color:#fff;}
+  .empty-note{color:var(--ink-soft);font-size:13px;font-style:italic;}
+
+  input[type=text],input[type=number],select{
+    font-family:'Inter',sans-serif;font-size:14px;
+    padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+    background:#fff;color:var(--ink);width:100%;
+  }
+  input:focus,select:focus{outline:2px solid var(--teal);outline-offset:0;border-color:var(--teal);}
+  label.field-label{
+    display:block;font-size:12px;font-weight:600;color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;
+  }
+  .btn{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;
+    border:none;border-radius:8px;padding:11px 18px;cursor:pointer;
+    background:var(--teal);color:#fff;transition:background .15s ease, transform .1s ease;
+  }
+  .btn:hover{background:var(--teal-deep);}
+  .btn:active{transform:scale(.98);}
+  .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--border);}
+  .btn.secondary:hover{background:var(--border-soft);}
+  .btn.wide{width:100%;padding:14px;font-size:15px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+  .form-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:16px;}
+  @media (max-width:640px){.form-grid{grid-template-columns:1fr;}}
+  .participants-box{margin-bottom:16px;}
+  .participants-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+  .p-check{
+    display:flex;align-items:center;gap:6px;
+    background:#fff;border:1px solid var(--border);border-radius:999px;
+    padding:7px 12px 7px 8px;font-size:13px;cursor:pointer;user-select:none;
+  }
+  .p-check input{margin:0;accent-color:var(--teal);width:15px;height:15px;}
+  .p-check.excluded{opacity:.4;text-decoration:line-through;}
+
+  .photo-box{
+    display:flex;align-items:center;gap:12px;margin-bottom:16px;
+    border:1px dashed var(--border);border-radius:10px;padding:10px 12px;background:#fff;
+  }
+  .photo-box .thumb{
+    width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--border-soft);
+    background:var(--border-soft);flex-shrink:0;
+  }
+  .photo-box label.upload-label{
+    display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;
+    color:var(--teal-deep);cursor:pointer;
+  }
+  .photo-box input[type=file]{display:none;}
+  .photo-box .remove-photo{background:none;border:none;color:var(--ink-soft);font-size:12px;cursor:pointer;margin-left:auto;}
+
+  .receipts{display:flex;flex-direction:column;gap:10px;}
+  .receipt{
+    position:relative;
+    background:#fff;border:1px solid var(--border-soft);border-radius:10px;
+    padding:14px 16px;
+    display:grid;grid-template-columns:auto 1fr auto auto;gap:6px 14px;align-items:center;
+  }
+  .receipt::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:var(--teal);border-radius:10px 0 0 10px;
+  }
+  .receipt .thumb-wrap{grid-row:1/3;}
+  .receipt .thumb{
+    width:44px;height:44px;border-radius:8px;object-fit:cover;cursor:pointer;
+    border:1px solid var(--border-soft);
+  }
+  .receipt .desc{font-weight:600;font-size:14.5px;}
+  .receipt .meta{grid-column:2/3;color:var(--ink-soft);font-size:12.5px;}
+  .receipt .amount{
+    font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:16px;
+    color:var(--teal-deep);white-space:nowrap;
+  }
+  .receipt .del{
+    background:transparent;border:none;color:var(--ink-soft);cursor:pointer;
+    font-size:13px;padding:4px 8px;border-radius:6px;
+  }
+  .receipt .del:hover{background:#fbe9e9;color:var(--red);}
+
+  .balances{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:20px;}
+  .balance-item{
+    background:#fff;border:1px solid var(--border-soft);border-radius:10px;padding:12px 14px;
+  }
+  .balance-item .name{font-weight:600;font-size:13.5px;margin-bottom:4px;}
+  .balance-item .val{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;}
+  .val.pos{color:var(--teal-deep);}
+  .val.neg{color:var(--red);}
+  .val.zero{color:var(--ink-soft);}
+
+  .transfers{display:flex;flex-direction:column;gap:8px;margin-bottom:8px;}
+  .transfer{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:#fff;border:1px solid var(--border-soft);border-radius:10px;
+    padding:12px 14px;font-size:14px;
+  }
+  .transfer .who{font-weight:600;}
+  .transfer .arrow{color:var(--amber);font-family:'IBM Plex Mono',monospace;}
+  .transfer .amt{
+    margin-left:auto;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--teal-deep);
+  }
+  .settled-note{color:var(--ink-soft);font-style:italic;font-size:14px;}
+
+  .actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;}
+  footer{text-align:center;color:var(--ink-soft);font-size:12px;margin-top:30px;}
+  ::selection{background:rgba(47,111,94,.2);}
+
+  /* photo modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(20,26,30,.82);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal-overlay img{max-width:100%;max-height:85vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .modal-overlay .close-modal{
+    position:absolute;top:18px;right:18px;background:#fff;border:none;
+    width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Ledger de bolsillo · guardado en este dispositivo</div>
+    <h1>Cuentas de Viaje</h1>
+    <div class="trip-bar">
+      <select id="tripSelect" onchange="switchTrip(this.value)"></select>
+      <button class="icon-btn" onclick="newTrip()">+ Nuevo viaje</button>
+      <button class="icon-btn" onclick="renameTrip()">Renombrar</button>
+      <button class="icon-btn danger" onclick="deleteTrip()">Eliminar</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Viajeros</h2>
+    <p class="hint">Añade a todas las personas que participan en este viaje.</p>
+    <div class="traveler-add">
+      <input id="travelerInput" type="text" placeholder="Nombre del viajero">
+      <button class="btn" onclick="addTraveler()">Añadir</button>
+    </div>
+    <div id="travelerChips" class="chips"></div>
+  </section>
+
+  <section class="card">
+    <h2>Nuevo gasto</h2>
+    <p class="hint">Marca a quién corresponde este gasto — puedes excluir a quien no participó.</p>
+    <div class="form-grid">
+      <div>
+        <label class="field-label">Descripción</label>
+        <input id="expDesc" type="text" placeholder="Ej. Cena del sábado">
+      </div>
+      <div>
+        <label class="field-label">Importe (€)</label>
+        <input id="expAmount" type="number" step="0.01" min="0" placeholder="0.00">
+      </div>
+      <div>
+        <label class="field-label">Pagado por</label>
+        <select id="expPaidBy"></select>
+      </div>
+    </div>
+    <div class="participants-box">
+      <label class="field-label">Participan en este gasto</label>
+      <div id="participantsList" class="participants-list"></div>
+    </div>
+    <div class="photo-box">
+      <img id="photoPreview" class="thumb" style="display:none;">
+      <label class="upload-label">
+        📷 Foto del ticket
+        <input type="file" id="expPhotoInput" accept="image/*" capture="environment" onchange="handlePhotoSelect(event)">
+      </label>
+      <button class="remove-photo" id="removePhotoBtn" style="display:none;" onclick="clearPendingPhoto()">Quitar foto</button>
+    </div>
+    <button class="btn" onclick="addExpense()">Añadir gasto</button>
+  </section>
+
+  <section class="card">
+    <h2>Gastos registrados</h2>
+    <div id="receiptsList" class="receipts"></div>
+    <p id="noExpenses" class="empty-note">Todavía no hay gastos.</p>
+  </section>
+
+  <section class="card">
+    <h2>Liquidación</h2>
+    <p class="hint">Calcula el saldo de cada uno y quién debe pagar a quién.</p>
+    <button class="btn wide" onclick="calculate()">Calcular reparto</button>
+    <div id="results" style="margin-top:20px;"></div>
+    <div id="pdfRow" class="actions-row" style="display:none;">
+      <button class="btn secondary" onclick="exportPDF()">Descargar PDF</button>
+    </div>
+  </section>
+
+  <footer>Todo se guarda en el almacenamiento local de este dispositivo. Nada se envía a ningún servidor.</footer>
+</div>
+
+<div class="modal-overlay" id="photoModal" onclick="closePhotoModal(event)">
+  <button class="close-modal" onclick="closePhotoModal(event)">✕</button>
+  <img id="photoModalImg" src="">
+</div>
+
+<script>
+const STORAGE_KEY = 'cuentas-viaje-app-v2';
+const OLD_STORAGE_KEY = 'cuentas-viaje-app-v1';
+
+let appState = { currentTripId: null, trips: {} };
+let pendingPhoto = null; // base64 dataURL for the expense being drafted
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); }
+  catch(e){ console.warn('No se pudo guardar en localStorage (quizá las fotos ocupan demasiado espacio)', e); }
+}
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      appState = JSON.parse(raw);
+      return;
+    }
+    // migrate from old single-trip version if present
+    const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
+    if(oldRaw){
+      const old = JSON.parse(oldRaw);
+      const id = uid();
+      appState = {
+        currentTripId: id,
+        trips: { [id]: { id, name: old.tripName || 'Mi viaje', travelers: old.travelers||[], expenses: old.expenses||[] } }
+      };
+      save();
+      return;
+    }
+  }catch(e){ console.warn('No se pudo leer localStorage', e); }
+}
+
+function ensureTripExists(){
+  if(Object.keys(appState.trips).length === 0){
+    const id = uid();
+    appState.trips[id] = { id, name: 'Mi primer viaje', travelers: [], expenses: [] };
+    appState.currentTripId = id;
+  }
+  if(!appState.trips[appState.currentTripId]){
+    appState.currentTripId = Object.keys(appState.trips)[0];
+  }
+}
+
+function currentTrip(){ return appState.trips[appState.currentTripId]; }
+
+function fmt(cents){
+  return (cents/100).toLocaleString('es-ES', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+}
+
+/* ---------- rounding-safe splitting, all math in integer cents ---------- */
+function splitCents(totalCents, n){
+  const base = Math.floor(totalCents / n);
+  const remainder = totalCents - base * n;
+  const shares = new Array(n).fill(base);
+  for(let i=0;i<remainder;i++) shares[i] += 1; // first `remainder` participants absorb the leftover cent
+  return shares;
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  ensureTripExists();
+  const trip = currentTrip();
+
+  // trip selector
+  const sel = document.getElementById('tripSelect');
+  sel.innerHTML = Object.values(appState.trips).map(t=>
+    `<option value="${t.id}" ${t.id===trip.id?'selected':''}>${escapeHtml(t.name)}</option>`
+  ).join('');
+
+  // travelers chips
+  const chipsEl = document.getElementById('travelerChips');
+  chipsEl.innerHTML = '';
+  if(trip.travelers.length === 0){
+    chipsEl.innerHTML = '<span class="empty-note">Añade el primer viajero para empezar.</span>';
+  }
+  trip.travelers.forEach(t=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<span class="dot"></span><span>${escapeHtml(t.name)}</span>
+      <button title="Quitar viajero" onclick="removeTraveler('${t.id}')">✕</button>`;
+    chipsEl.appendChild(chip);
+  });
+
+  // paid by select
+  const paidBySel = document.getElementById('expPaidBy');
+  const prevVal = paidBySel.value;
+  paidBySel.innerHTML = trip.travelers.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  if(prevVal) paidBySel.value = prevVal;
+
+  // participants checkboxes
+  const partList = document.getElementById('participantsList');
+  partList.innerHTML = trip.travelers.map(t=>`
+    <label class="p-check" id="pcheck-${t.id}">
+      <input type="checkbox" value="${t.id}" checked onchange="toggleParticipantStyle('${t.id}')">
+      ${escapeHtml(t.name)}
+    </label>
+  `).join('');
+
+  // expenses list
+  const listEl = document.getElementById('receiptsList');
+  const noExp = document.getElementById('noExpenses');
+  listEl.innerHTML = '';
+  if(trip.expenses.length === 0){
+    noExp.style.display = 'block';
+  } else {
+    noExp.style.display = 'none';
+    [...trip.expenses].reverse().forEach(exp=>{
+      const payer = nameOf(exp.paidBy);
+      const participantNames = exp.participants.map(nameOf).join(', ') || '—';
+      const excluded = trip.travelers.filter(t=>!exp.participants.includes(t.id)).map(t=>t.name);
+      const el = document.createElement('div');
+      el.className = 'receipt';
+      el.innerHTML = `
+        <div class="thumb-wrap">
+          ${exp.photo ? `<img class="thumb" src="${exp.photo}" onclick="openPhotoModal('${exp.id}')">` : ''}
+        </div>
+        <div class="desc">${escapeHtml(exp.description)}</div>
+        <div class="amount">${fmt(exp.amountCents)}</div>
+        <button class="del" onclick="removeExpense('${exp.id}')">Eliminar</button>
+        <div class="meta">Pagó ${escapeHtml(payer)} · Reparte entre: ${escapeHtml(participantNames)}${excluded.length? ' · Excluido: '+escapeHtml(excluded.join(', ')):''}</div>
+      `;
+      listEl.appendChild(el);
+    });
+  }
+
+  save();
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function nameOf(id){
+  const t = currentTrip().travelers.find(t=>t.id===id);
+  return t ? t.name : '?';
+}
+
+function toggleParticipantStyle(id){
+  const label = document.getElementById('pcheck-'+id);
+  const checked = label.querySelector('input').checked;
+  label.classList.toggle('excluded', !checked);
+}
+
+/* ---------- trips ---------- */
+function switchTrip(id){
+  appState.currentTripId = id;
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('pdfRow').style.display = 'none';
+  clearPendingPhoto();
+  render();
+}
+
+function newTrip(){
+  const name = prompt('Nombre del nuevo viaje:', '');
+  if(name === null) return;
+  const id = uid();
+  appState.trips[id] = { id, name: name.trim() || 'Viaje sin nombre', travelers: [], expenses: [] };
+  appState.currentTripId = id;
+  render();
+}
+
+function renameTrip(){
+  const trip = currentTrip();
+  const name = prompt('Nuevo nombre del viaje:', trip.name);
+  if(name === null || !name.trim()) return;
+  trip.name = name.trim();
+  render();
+}
+
+function deleteTrip(){
+  const trip = currentTrip();
+  if(!confirm(`¿Eliminar "${trip.name}" y todos sus gastos? Esta acción no se puede deshacer.`)) return;
+  delete appState.trips[trip.id];
+  appState.currentTripId = null;
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('pdfRow').style.display = 'none';
+  render();
+}
+
+/* ---------- travelers ---------- */
+function addTraveler(){
+  const input = document.getElementById('travelerInput');
+  const name = input.value.trim();
+  if(!name) return;
+  currentTrip().travelers.push({ id: uid(), name });
+  input.value = '';
+  render();
+}
+
+document.getElementById('travelerInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') addTraveler();
+});
+
+function removeTraveler(id){
+  const trip = currentTrip();
+  const usedIn = trip.expenses.some(e => e.paidBy === id || e.participants.includes(id));
+  if(usedIn && !confirm('Este viajero aparece en algún gasto. ¿Quitarlo igualmente? (los gastos no se borran)')) return;
+  trip.travelers = trip.travelers.filter(t=>t.id!==id);
+  render();
+}
+
+/* ---------- photos ---------- */
+function resizeImage(file, maxWidth, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > maxWidth){ h = Math.round(h * maxWidth / w); w = maxWidth; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handlePhotoSelect(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  try{
+    pendingPhoto = await resizeImage(file, 900, 0.6);
+    const preview = document.getElementById('photoPreview');
+    preview.src = pendingPhoto;
+    preview.style.display = 'block';
+    document.getElementById('removePhotoBtn').style.display = 'inline';
+  }catch(e){
+    alert('No se pudo procesar la foto.');
+  }
+}
+
+function clearPendingPhoto(){
+  pendingPhoto = null;
+  document.getElementById('expPhotoInput').value = '';
+  document.getElementById('photoPreview').style.display = 'none';
+  document.getElementById('removePhotoBtn').style.display = 'none';
+}
+
+function openPhotoModal(expenseId){
+  const exp = currentTrip().expenses.find(e=>e.id===expenseId);
+  if(!exp || !exp.photo) return;
+  document.getElementById('photoModalImg').src = exp.photo;
+  document.getElementById('photoModal').classList.add('open');
+}
+
+function closePhotoModal(event){
+  if(event.target.id === 'photoModal' || event.target.classList.contains('close-modal')){
+    document.getElementById('photoModal').classList.remove('open');
+  }
+}
+
+/* ---------- expenses ---------- */
+function addExpense(){
+  const trip = currentTrip();
+  const desc = document.getElementById('expDesc').value.trim();
+  const amountRaw = parseFloat(document.getElementById('expAmount').value);
+  const paidBy = document.getElementById('expPaidBy').value;
+  const checks = [...document.querySelectorAll('#participantsList input[type=checkbox]')];
+  const participants = checks.filter(c=>c.checked).map(c=>c.value);
+
+  if(!desc){ alert('Escribe una descripción del gasto.'); return; }
+  if(!amountRaw || amountRaw<=0){ alert('Introduce un importe válido.'); return; }
+  if(!paidBy){ alert('Añade al menos un viajero primero.'); return; }
+  if(participants.length===0){ alert('Selecciona al menos un participante para repartir el gasto.'); return; }
+
+  trip.expenses.push({
+    id: uid(),
+    description: desc,
+    amountCents: Math.round(amountRaw*100),
+    paidBy,
+    participants,
+    photo: pendingPhoto,
+    date: new Date().toISOString()
+  });
+
+  document.getElementById('expDesc').value = '';
+  document.getElementById('expAmount').value = '';
+  clearPendingPhoto();
+  render();
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('pdfRow').style.display = 'none';
+}
+
+function removeExpense(id){
+  const trip = currentTrip();
+  trip.expenses = trip.expenses.filter(e=>e.id!==id);
+  render();
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('pdfRow').style.display = 'none';
+}
+
+/* ---------- balances (all integer cents, no floating point drift) ---------- */
+function computeBalancesCents(){
+  const trip = currentTrip();
+  const balance = {};
+  trip.travelers.forEach(t => balance[t.id] = 0);
+
+  trip.expenses.forEach(exp=>{
+    const shares = splitCents(exp.amountCents, exp.participants.length);
+    if(balance[exp.paidBy] !== undefined) balance[exp.paidBy] += exp.amountCents;
+    exp.participants.forEach((pid, idx)=>{
+      if(balance[pid] !== undefined) balance[pid] -= shares[idx];
+    });
+  });
+  return balance;
+}
+
+function simplifyDebtsCents(balance){
+  const creditors = [];
+  const debtors = [];
+  Object.entries(balance).forEach(([id,val])=>{
+    if(val > 0) creditors.push({id, amount: val});
+    else if(val < 0) debtors.push({id, amount: -val});
+  });
+  creditors.sort((a,b)=>b.amount-a.amount);
+  debtors.sort((a,b)=>b.amount-a.amount);
+
+  const transfers = [];
+  let i=0, j=0;
+  while(i<debtors.length && j<creditors.length){
+    const d = debtors[i], c = creditors[j];
+    const amt = Math.min(d.amount, c.amount);
+    if(amt > 0){
+      transfers.push({ from:d.id, to:c.id, amount: amt });
+    }
+    d.amount -= amt; c.amount -= amt;
+    if(d.amount === 0) i++;
+    if(c.amount === 0) j++;
+  }
+  return transfers;
+}
+
+let lastResults = null;
+
+function calculate(){
+  const trip = currentTrip();
+  if(trip.travelers.length === 0){
+    document.getElementById('results').innerHTML = '<p class="empty-note">Añade viajeros y gastos primero.</p>';
+    return;
+  }
+  const balance = computeBalancesCents();
+  const transfers = simplifyDebtsCents(balance);
+  lastResults = { balance, transfers };
+
+  const balancesHtml = `<div class="balances">` + trip.travelers.map(t=>{
+    const v = balance[t.id]||0;
+    const cls = v > 0 ? 'pos' : (v < 0 ? 'neg' : 'zero');
+    const label = v > 0 ? 'le deben' : (v < 0 ? 'debe' : 'en paz');
+    return `<div class="balance-item">
+      <div class="name">${escapeHtml(t.name)}</div>
+      <div class="val ${cls}">${fmt(Math.abs(v))}</div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${label}</div>
+    </div>`;
+  }).join('') + `</div>`;
+
+  let transfersHtml;
+  if(transfers.length === 0){
+    transfersHtml = '<p class="settled-note">Todas las cuentas están saldadas — nadie debe nada.</p>';
+  } else {
+    transfersHtml = '<div class="transfers">' + transfers.map(tr=>`
+      <div class="transfer">
+        <span class="who">${escapeHtml(nameOf(tr.from))}</span>
+        <span class="arrow">paga a</span>
+        <span class="who">${escapeHtml(nameOf(tr.to))}</span>
+        <span class="amt">${fmt(tr.amount)}</span>
+      </div>
+    `).join('') + '</div>';
+  }
+
+  document.getElementById('results').innerHTML = balancesHtml + transfersHtml;
+  document.getElementById('pdfRow').style.display = trip.expenses.length ? 'flex' : 'none';
+}
+
+/* ---------- PDF export ---------- */
+function exportPDF(){
+  const trip = currentTrip();
+  if(!lastResults){ calculate(); }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const tripTitle = trip.name || 'Cuentas de viaje';
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.text(tripTitle, 14, 20);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('Generado el ' + new Date().toLocaleDateString('es-ES'), 14, 27);
+  doc.setTextColor(0);
+
+  const expenseRows = trip.expenses.map(e=>[
+    e.description,
+    fmt(e.amountCents),
+    nameOf(e.paidBy),
+    e.participants.map(nameOf).join(', ')
+  ]);
+
+  doc.autoTable({
+    startY: 34,
+    head: [['Descripción','Importe','Pagado por','Participantes']],
+    body: expenseRows.length ? expenseRows : [['(sin gastos)','','','']],
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [47,111,94] },
+    theme: 'striped'
+  });
+
+  const totalCents = trip.expenses.reduce((s,e)=>s+e.amountCents,0);
+  let y = doc.lastAutoTable.finalY + 10;
+  doc.setFont('helvetica','bold');
+  doc.text('Total del viaje: ' + fmt(totalCents), 14, y);
+  doc.setFont('helvetica','normal');
+  y += 10;
+
+  const balance = lastResults ? lastResults.balance : computeBalancesCents();
+  const balanceRows = trip.travelers.map(t=>{
+    const v = balance[t.id]||0;
+    const label = v>0 ? 'Le deben' : (v<0 ? 'Debe' : 'En paz');
+    return [t.name, label, fmt(Math.abs(v))];
+  });
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text('Balance por viajero', 14, y);
+  y += 4;
+  doc.autoTable({
+    startY: y,
+    head: [['Viajero','Estado','Importe']],
+    body: balanceRows,
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [47,111,94] },
+    theme: 'striped'
+  });
+
+  y = doc.lastAutoTable.finalY + 10;
+  const transfers = lastResults ? lastResults.transfers : simplifyDebtsCents(balance);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text('Liquidación sugerida', 14, y);
+  y += 4;
+
+  if(transfers.length === 0){
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(10);
+    doc.text('Todas las cuentas están saldadas.', 14, y + 6);
+    y += 12;
+  } else {
+    const transferRows = transfers.map(tr=>[nameOf(tr.from), nameOf(tr.to), fmt(tr.amount)]);
+    doc.autoTable({
+      startY: y,
+      head: [['Paga','Recibe','Importe']],
+      body: transferRows,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [201,138,44] },
+      theme: 'striped'
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  // Ticket photos appendix
+  const withPhotos = trip.expenses.filter(e=>e.photo);
+  if(withPhotos.length){
+    doc.addPage();
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(14);
+    doc.text('Fotos de tickets', 14, 20);
+    let py = 30;
+    const imgW = 80;
+    withPhotos.forEach((exp)=>{
+      if(py + 70 > 285){ doc.addPage(); py = 20; }
+      try{
+        doc.addImage(exp.photo, 'JPEG', 14, py, imgW, imgW*0.75);
+      }catch(e){}
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(10);
+      doc.text(`${exp.description} — ${fmt(exp.amountCents)}`, 14 + imgW + 8, py + 10);
+      py += imgW*0.75 + 12;
+    });
+  }
+
+  const safeName = (trip.name || 'cuentas-viaje').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+  doc.save(`${safeName || 'cuentas-viaje'}.pdf`);
+}
+
+/* ---------- init ---------- */
+load();
+render();
+
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
