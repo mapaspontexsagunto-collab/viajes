@@ -13,6 +13,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -29,7 +30,8 @@
     --border-soft:#e8e1d0;
     --shadow: 0 1px 2px rgba(34,48,58,.06), 0 6px 16px rgba(34,48,58,.06);
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;min-width:0;}
+  html,body{overflow-x:hidden;width:100%;}
   body{
     margin:0;
     background:
@@ -38,28 +40,33 @@
     color:var(--ink);
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
-    padding:24px 16px 90px;
+    padding:calc(20px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(90px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
   }
-  .wrap{max-width:880px;margin:0 auto;}
+  .wrap{max-width:880px;margin:0 auto;width:100%;}
+  img{max-width:100%;}
 
-  header{margin-bottom:20px;}
+  header{margin-bottom:22px;}
   .eyebrow{
     font-family:'IBM Plex Mono',monospace;
     font-size:11px;letter-spacing:.14em;text-transform:uppercase;
     color:var(--teal-deep);font-weight:600;margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   }
+  .eyebrow .dot-status{width:7px;height:7px;border-radius:50%;background:var(--teal);flex-shrink:0;}
+  .eyebrow .dot-status.error{background:var(--red);}
+  .eyebrow .dot-status.busy{background:var(--amber);}
   h1{
-    font-family:'Fraunces',serif;font-weight:600;font-size:clamp(26px,6vw,40px);
-    margin:0 0 16px;line-height:1.05;
+    font-family:'Fraunces',serif;font-weight:600;font-size:clamp(28px,7vw,42px);
+    margin:0 0 14px;line-height:1.05;overflow-wrap:anywhere;word-break:break-word;
   }
 
-  /* trip switcher */
+  /* trip switcher — secondary bar, sits below the trip name */
   .trip-bar{
     display:flex;align-items:center;gap:8px;flex-wrap:wrap;
     background:var(--paper-raised);border:1px solid var(--border-soft);
     border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);
   }
-  .trip-bar select{flex:1;min-width:140px;font-family:'Fraunces',serif;font-style:italic;font-size:16px;}
+  .trip-bar select{flex:1;min-width:0;font-family:'Fraunces',serif;font-style:italic;font-size:15px;}
   .icon-btn{
     border:1px solid var(--border);background:#fff;color:var(--ink-soft);
     border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;font-weight:600;
@@ -118,6 +125,8 @@
   .btn.secondary:hover{background:var(--border-soft);}
   .btn.wide{width:100%;padding:14px;font-size:15px;}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .icon-btn:disabled{opacity:.45;cursor:not-allowed;}
+  select:disabled{opacity:.6;}
 
   .form-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:16px;}
   @media (max-width:640px){.form-grid{grid-template-columns:1fr;}}
@@ -162,8 +171,8 @@
     width:44px;height:44px;border-radius:8px;object-fit:cover;cursor:pointer;
     border:1px solid var(--border-soft);
   }
-  .receipt .desc{font-weight:600;font-size:14.5px;}
-  .receipt .meta{grid-column:2/3;color:var(--ink-soft);font-size:12.5px;}
+  .receipt .desc{font-weight:600;font-size:14.5px;overflow-wrap:anywhere;word-break:break-word;}
+  .receipt .meta{grid-column:2/3;color:var(--ink-soft);font-size:12.5px;overflow-wrap:anywhere;word-break:break-word;}
   .receipt .amount{
     font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:16px;
     color:var(--teal-deep);white-space:nowrap;
@@ -218,10 +227,13 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">Ledger de bolsillo · guardado en este dispositivo</div>
-    <h1>Cuentas de Viaje</h1>
+    <div class="eyebrow">
+      <span class="dot-status" id="statusDot"></span>
+      <span id="syncStatus">Cuentas de viaje · conectando…</span>
+    </div>
+    <h1 id="tripTitle">Cargando viaje…</h1>
     <div class="trip-bar">
-      <select id="tripSelect" onchange="switchTrip(this.value)"></select>
+      <select id="tripSelect" onchange="switchTrip(this.value)" disabled></select>
       <button class="icon-btn" onclick="newTrip()">+ Nuevo viaje</button>
       <button class="icon-btn" onclick="renameTrip()">Renombrar</button>
       <button class="icon-btn danger" onclick="deleteTrip()">Eliminar</button>
@@ -286,7 +298,7 @@
     </div>
   </section>
 
-  <footer>Todo se guarda en el almacenamiento local de este dispositivo. Nada se envía a ningún servidor.</footer>
+  <footer>Los datos de este viaje se guardan en Supabase (incluidas las fotos de los tickets), no solo en este dispositivo.</footer>
 </div>
 
 <div class="modal-overlay" id="photoModal" onclick="closePhotoModal(event)">
@@ -295,56 +307,60 @@
 </div>
 
 <script>
-const STORAGE_KEY = 'cuentas-viaje-app-v2';
-const OLD_STORAGE_KEY = 'cuentas-viaje-app-v1';
+/* ============================================================
+   Conexión a Supabase
+   ============================================================ */
+const SUPABASE_URL = 'https://edhjylauvxcbrevgzpjw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkaGp5bGF1dnhjYnJldmd6cGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjUzMjIsImV4cCI6MjA5ODQ0MTMyMn0.U0nyuHvjD1t9uEsxcofpx1mKmA5PfycISqYTWfmToW8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let appState = { currentTripId: null, trips: {} };
-let pendingPhoto = null; // base64 dataURL for the expense being drafted
+const LAST_TRIP_KEY = 'cuentas-viaje-last-trip-id';
+const BUCKET = 'ticket-photos';
+
+/* ---------- estado en memoria ---------- */
+let trips = [];          // [{id, name, ...}]
+let currentTrip = null;  // {id, name, ...}
+let travelers = [];      // [{id, name, trip_id}]
+let expenses = [];       // [{id, description, amount_cents, paid_by, participants, photo_url, expense_date}]
+let pendingPhotoBlob = null;
+let pendingPhotoDataUrl = null;
+let lastResults = null;
+let realtimeChannel = null;
+let busyCount = 0;
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
-function save(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); }
-  catch(e){ console.warn('No se pudo guardar en localStorage (quizá las fotos ocupan demasiado espacio)', e); }
-}
-
-function load(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      appState = JSON.parse(raw);
-      return;
-    }
-    // migrate from old single-trip version if present
-    const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
-    if(oldRaw){
-      const old = JSON.parse(oldRaw);
-      const id = uid();
-      appState = {
-        currentTripId: id,
-        trips: { [id]: { id, name: old.tripName || 'Mi viaje', travelers: old.travelers||[], expenses: old.expenses||[] } }
-      };
-      save();
-      return;
-    }
-  }catch(e){ console.warn('No se pudo leer localStorage', e); }
-}
-
-function ensureTripExists(){
-  if(Object.keys(appState.trips).length === 0){
-    const id = uid();
-    appState.trips[id] = { id, name: 'Mi primer viaje', travelers: [], expenses: [] };
-    appState.currentTripId = id;
-  }
-  if(!appState.trips[appState.currentTripId]){
-    appState.currentTripId = Object.keys(appState.trips)[0];
-  }
-}
-
-function currentTrip(){ return appState.trips[appState.currentTripId]; }
-
 function fmt(cents){
   return (cents/100).toLocaleString('es-ES', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function nameOf(id){
+  const t = travelers.find(t=>t.id===id);
+  return t ? t.name : '?';
+}
+
+/* ---------- estado de sincronización visible en el eyebrow ---------- */
+function setStatus(text, kind){
+  const dot = document.getElementById('statusDot');
+  const label = document.getElementById('syncStatus');
+  label.textContent = text;
+  dot.className = 'dot-status' + (kind ? ' ' + kind : '');
+}
+
+function setBusy(isBusy){
+  busyCount += isBusy ? 1 : -1;
+  if(busyCount < 0) busyCount = 0;
+  const disable = busyCount > 0;
+  document.querySelectorAll('.btn, .icon-btn, select').forEach(el => { el.disabled = disable; });
+  if(disable){
+    setStatus('Guardando…', 'busy');
+  } else {
+    setStatus('Cuentas de viaje · sincronizado con Supabase', '');
+  }
 }
 
 /* ---------- rounding-safe splitting, all math in integer cents ---------- */
@@ -356,24 +372,86 @@ function splitCents(totalCents, n){
   return shares;
 }
 
+/* ---------- carga inicial ---------- */
+async function init(){
+  setStatus('Cuentas de viaje · conectando…', 'busy');
+  try{
+    const { data, error } = await sb.from('trips').select('*').order('created_at', { ascending: true });
+    if(error) throw error;
+    trips = data || [];
+
+    if(trips.length === 0){
+      const { data: created, error: cErr } = await sb.from('trips').insert({ name: 'Mi primer viaje' }).select().single();
+      if(cErr) throw cErr;
+      trips = [created];
+    }
+
+    const lastId = localStorage.getItem(LAST_TRIP_KEY);
+    const initialId = trips.some(t=>t.id===lastId) ? lastId : trips[0].id;
+    document.getElementById('tripSelect').disabled = false;
+    await switchTrip(initialId);
+  }catch(e){
+    console.error(e);
+    document.getElementById('tripTitle').textContent = 'No se pudo conectar';
+    setStatus('Sin conexión con Supabase — revisa tu red', 'error');
+  }
+}
+
+async function loadTripData(id){
+  try{
+    const [{ data: tripData, error: tripErr },
+           { data: travelersData, error: travErr },
+           { data: expensesData, error: expErr }] = await Promise.all([
+      sb.from('trips').select('*').eq('id', id).single(),
+      sb.from('travelers').select('*').eq('trip_id', id).order('created_at', { ascending: true }),
+      sb.from('expenses').select('*').eq('trip_id', id).order('expense_date', { ascending: false })
+    ]);
+    if(tripErr) throw tripErr;
+    if(travErr) throw travErr;
+    if(expErr) throw expErr;
+
+    currentTrip = tripData;
+    travelers = travelersData || [];
+    expenses = expensesData || [];
+    render();
+    setStatus('Cuentas de viaje · sincronizado con Supabase', '');
+  }catch(e){
+    console.error(e);
+    document.getElementById('tripTitle').textContent = 'Error al cargar el viaje';
+    setStatus('No se pudo cargar este viaje', 'error');
+  }
+}
+
+function subscribeRealtime(tripId){
+  if(realtimeChannel){
+    sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+  realtimeChannel = sb.channel('trip-'+tripId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'travelers', filter: `trip_id=eq.${tripId}` }, () => loadTripData(tripId))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `trip_id=eq.${tripId}` }, () => loadTripData(tripId))
+    .subscribe();
+}
+
 /* ---------- rendering ---------- */
 function render(){
-  ensureTripExists();
-  const trip = currentTrip();
+  if(!currentTrip) return;
+
+  document.getElementById('tripTitle').textContent = currentTrip.name;
 
   // trip selector
   const sel = document.getElementById('tripSelect');
-  sel.innerHTML = Object.values(appState.trips).map(t=>
-    `<option value="${t.id}" ${t.id===trip.id?'selected':''}>${escapeHtml(t.name)}</option>`
+  sel.innerHTML = trips.map(t=>
+    `<option value="${t.id}" ${t.id===currentTrip.id?'selected':''}>${escapeHtml(t.name)}</option>`
   ).join('');
 
   // travelers chips
   const chipsEl = document.getElementById('travelerChips');
   chipsEl.innerHTML = '';
-  if(trip.travelers.length === 0){
+  if(travelers.length === 0){
     chipsEl.innerHTML = '<span class="empty-note">Añade el primer viajero para empezar.</span>';
   }
-  trip.travelers.forEach(t=>{
+  travelers.forEach(t=>{
     const chip = document.createElement('div');
     chip.className = 'chip';
     chip.innerHTML = `<span class="dot"></span><span>${escapeHtml(t.name)}</span>
@@ -384,12 +462,12 @@ function render(){
   // paid by select
   const paidBySel = document.getElementById('expPaidBy');
   const prevVal = paidBySel.value;
-  paidBySel.innerHTML = trip.travelers.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  paidBySel.innerHTML = travelers.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
   if(prevVal) paidBySel.value = prevVal;
 
   // participants checkboxes
   const partList = document.getElementById('participantsList');
-  partList.innerHTML = trip.travelers.map(t=>`
+  partList.innerHTML = travelers.map(t=>`
     <label class="p-check" id="pcheck-${t.id}">
       <input type="checkbox" value="${t.id}" checked onchange="toggleParticipantStyle('${t.id}')">
       ${escapeHtml(t.name)}
@@ -400,39 +478,28 @@ function render(){
   const listEl = document.getElementById('receiptsList');
   const noExp = document.getElementById('noExpenses');
   listEl.innerHTML = '';
-  if(trip.expenses.length === 0){
+  if(expenses.length === 0){
     noExp.style.display = 'block';
   } else {
     noExp.style.display = 'none';
-    [...trip.expenses].reverse().forEach(exp=>{
-      const payer = nameOf(exp.paidBy);
-      const participantNames = exp.participants.map(nameOf).join(', ') || '—';
-      const excluded = trip.travelers.filter(t=>!exp.participants.includes(t.id)).map(t=>t.name);
+    expenses.forEach(exp=>{
+      const payer = nameOf(exp.paid_by);
+      const participantNames = (exp.participants||[]).map(nameOf).join(', ') || '—';
+      const excluded = travelers.filter(t=>!(exp.participants||[]).includes(t.id)).map(t=>t.name);
       const el = document.createElement('div');
       el.className = 'receipt';
       el.innerHTML = `
         <div class="thumb-wrap">
-          ${exp.photo ? `<img class="thumb" src="${exp.photo}" onclick="openPhotoModal('${exp.id}')">` : ''}
+          ${exp.photo_url ? `<img class="thumb" src="${exp.photo_url}" onclick="openPhotoModal('${exp.id}')">` : ''}
         </div>
         <div class="desc">${escapeHtml(exp.description)}</div>
-        <div class="amount">${fmt(exp.amountCents)}</div>
+        <div class="amount">${fmt(exp.amount_cents)}</div>
         <button class="del" onclick="removeExpense('${exp.id}')">Eliminar</button>
         <div class="meta">Pagó ${escapeHtml(payer)} · Reparte entre: ${escapeHtml(participantNames)}${excluded.length? ' · Excluido: '+escapeHtml(excluded.join(', ')):''}</div>
       `;
       listEl.appendChild(el);
     });
   }
-
-  save();
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function nameOf(id){
-  const t = currentTrip().travelers.find(t=>t.id===id);
-  return t ? t.name : '?';
 }
 
 function toggleParticipantStyle(id){
@@ -442,61 +509,111 @@ function toggleParticipantStyle(id){
 }
 
 /* ---------- trips ---------- */
-function switchTrip(id){
-  appState.currentTripId = id;
+async function switchTrip(id){
+  localStorage.setItem(LAST_TRIP_KEY, id);
   document.getElementById('results').innerHTML = '';
   document.getElementById('pdfRow').style.display = 'none';
   clearPendingPhoto();
-  render();
+  await loadTripData(id);
+  subscribeRealtime(id);
 }
 
-function newTrip(){
+async function newTrip(){
   const name = prompt('Nombre del nuevo viaje:', '');
   if(name === null) return;
-  const id = uid();
-  appState.trips[id] = { id, name: name.trim() || 'Viaje sin nombre', travelers: [], expenses: [] };
-  appState.currentTripId = id;
-  render();
+  setBusy(true);
+  try{
+    const { data, error } = await sb.from('trips').insert({ name: name.trim() || 'Viaje sin nombre' }).select().single();
+    if(error) throw error;
+    trips.push(data);
+    await switchTrip(data.id);
+  }catch(e){
+    console.error(e);
+    alert('No se pudo crear el viaje: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
-function renameTrip(){
-  const trip = currentTrip();
-  const name = prompt('Nuevo nombre del viaje:', trip.name);
+async function renameTrip(){
+  if(!currentTrip) return;
+  const name = prompt('Nuevo nombre del viaje:', currentTrip.name);
   if(name === null || !name.trim()) return;
-  trip.name = name.trim();
-  render();
+  setBusy(true);
+  try{
+    const { error } = await sb.from('trips').update({ name: name.trim(), updated_at: new Date().toISOString() }).eq('id', currentTrip.id);
+    if(error) throw error;
+    currentTrip.name = name.trim();
+    const t = trips.find(t=>t.id===currentTrip.id);
+    if(t) t.name = currentTrip.name;
+    render();
+  }catch(e){
+    console.error(e);
+    alert('No se pudo renombrar el viaje: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
-function deleteTrip(){
-  const trip = currentTrip();
-  if(!confirm(`¿Eliminar "${trip.name}" y todos sus gastos? Esta acción no se puede deshacer.`)) return;
-  delete appState.trips[trip.id];
-  appState.currentTripId = null;
-  document.getElementById('results').innerHTML = '';
-  document.getElementById('pdfRow').style.display = 'none';
-  render();
+async function deleteTrip(){
+  if(!currentTrip) return;
+  if(!confirm(`¿Eliminar "${currentTrip.name}" y todos sus gastos? Esta acción no se puede deshacer.`)) return;
+  setBusy(true);
+  try{
+    const deletedId = currentTrip.id;
+    const { error } = await sb.from('trips').delete().eq('id', deletedId);
+    if(error) throw error;
+    trips = trips.filter(t=>t.id!==deletedId);
+    currentTrip = null;
+
+    if(trips.length === 0){
+      const { data: created, error: cErr } = await sb.from('trips').insert({ name: 'Mi primer viaje' }).select().single();
+      if(cErr) throw cErr;
+      trips = [created];
+    }
+    await switchTrip(trips[0].id);
+  }catch(e){
+    console.error(e);
+    alert('No se pudo eliminar el viaje: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
 /* ---------- travelers ---------- */
-function addTraveler(){
+async function addTraveler(){
+  if(!currentTrip) return;
   const input = document.getElementById('travelerInput');
   const name = input.value.trim();
   if(!name) return;
-  currentTrip().travelers.push({ id: uid(), name });
-  input.value = '';
-  render();
+  setBusy(true);
+  try{
+    const { data, error } = await sb.from('travelers').insert({ trip_id: currentTrip.id, name }).select().single();
+    if(error) throw error;
+    travelers.push(data);
+    input.value = '';
+    render();
+  }catch(e){
+    console.error(e);
+    alert('No se pudo añadir el viajero: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
 document.getElementById('travelerInput').addEventListener('keydown', e=>{
   if(e.key === 'Enter') addTraveler();
 });
 
-function removeTraveler(id){
-  const trip = currentTrip();
-  const usedIn = trip.expenses.some(e => e.paidBy === id || e.participants.includes(id));
+async function removeTraveler(id){
+  const usedIn = expenses.some(e => e.paid_by === id || (e.participants||[]).includes(id));
   if(usedIn && !confirm('Este viajero aparece en algún gasto. ¿Quitarlo igualmente? (los gastos no se borran)')) return;
-  trip.travelers = trip.travelers.filter(t=>t.id!==id);
-  render();
+  setBusy(true);
+  try{
+    const { error } = await sb.from('travelers').delete().eq('id', id);
+    if(error) throw error;
+    travelers = travelers.filter(t=>t.id!==id);
+    render();
+  }catch(e){
+    console.error(e);
+    if(e.code === '23503'){
+      alert('No puedes quitar a este viajero porque pagó uno o más gastos. Reasigna o elimina esos gastos primero.');
+    } else {
+      alert('No se pudo quitar al viajero: ' + e.message);
+    }
+  }finally{ setBusy(false); }
 }
 
 /* ---------- photos ---------- */
@@ -511,7 +628,11 @@ function resizeImage(file, maxWidth, quality){
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        canvas.toBlob((blob)=>{
+          if(!blob){ reject(new Error('No se pudo generar la imagen')); return; }
+          resolve({ dataUrl, blob });
+        }, 'image/jpeg', quality);
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -525,27 +646,50 @@ async function handlePhotoSelect(event){
   const file = event.target.files[0];
   if(!file) return;
   try{
-    pendingPhoto = await resizeImage(file, 900, 0.6);
+    const { dataUrl, blob } = await resizeImage(file, 900, 0.6);
+    pendingPhotoDataUrl = dataUrl;
+    pendingPhotoBlob = blob;
     const preview = document.getElementById('photoPreview');
-    preview.src = pendingPhoto;
+    preview.src = dataUrl;
     preview.style.display = 'block';
     document.getElementById('removePhotoBtn').style.display = 'inline';
   }catch(e){
+    console.error(e);
     alert('No se pudo procesar la foto.');
   }
 }
 
 function clearPendingPhoto(){
-  pendingPhoto = null;
+  pendingPhotoBlob = null;
+  pendingPhotoDataUrl = null;
   document.getElementById('expPhotoInput').value = '';
   document.getElementById('photoPreview').style.display = 'none';
   document.getElementById('removePhotoBtn').style.display = 'none';
 }
 
+async function uploadPendingPhoto(){
+  if(!pendingPhotoBlob || !currentTrip) return null;
+  const path = `${currentTrip.id}/${uid()}.jpg`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, pendingPhotoBlob, { contentType: 'image/jpeg', upsert: false });
+  if(error) throw error;
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function deletePhotoBestEffort(url){
+  try{
+    const marker = `/${BUCKET}/`;
+    const idx = url.indexOf(marker);
+    if(idx === -1) return;
+    const path = decodeURIComponent(url.slice(idx + marker.length));
+    sb.storage.from(BUCKET).remove([path]).catch(()=>{});
+  }catch(e){ /* best effort, ignore */ }
+}
+
 function openPhotoModal(expenseId){
-  const exp = currentTrip().expenses.find(e=>e.id===expenseId);
-  if(!exp || !exp.photo) return;
-  document.getElementById('photoModalImg').src = exp.photo;
+  const exp = expenses.find(e=>e.id===expenseId);
+  if(!exp || !exp.photo_url) return;
+  document.getElementById('photoModalImg').src = exp.photo_url;
   document.getElementById('photoModal').classList.add('open');
 }
 
@@ -556,8 +700,8 @@ function closePhotoModal(event){
 }
 
 /* ---------- expenses ---------- */
-function addExpense(){
-  const trip = currentTrip();
+async function addExpense(){
+  if(!currentTrip) return;
   const desc = document.getElementById('expDesc').value.trim();
   const amountRaw = parseFloat(document.getElementById('expAmount').value);
   const paidBy = document.getElementById('expPaidBy').value;
@@ -569,42 +713,62 @@ function addExpense(){
   if(!paidBy){ alert('Añade al menos un viajero primero.'); return; }
   if(participants.length===0){ alert('Selecciona al menos un participante para repartir el gasto.'); return; }
 
-  trip.expenses.push({
-    id: uid(),
-    description: desc,
-    amountCents: Math.round(amountRaw*100),
-    paidBy,
-    participants,
-    photo: pendingPhoto,
-    date: new Date().toISOString()
-  });
+  setBusy(true);
+  try{
+    let photoUrl = null;
+    if(pendingPhotoBlob) photoUrl = await uploadPendingPhoto();
 
-  document.getElementById('expDesc').value = '';
-  document.getElementById('expAmount').value = '';
-  clearPendingPhoto();
-  render();
-  document.getElementById('results').innerHTML = '';
-  document.getElementById('pdfRow').style.display = 'none';
+    const { data, error } = await sb.from('expenses').insert({
+      trip_id: currentTrip.id,
+      description: desc,
+      amount_cents: Math.round(amountRaw*100),
+      paid_by: paidBy,
+      participants,
+      photo_url: photoUrl
+    }).select().single();
+    if(error) throw error;
+
+    expenses.unshift(data);
+    document.getElementById('expDesc').value = '';
+    document.getElementById('expAmount').value = '';
+    clearPendingPhoto();
+    render();
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('pdfRow').style.display = 'none';
+  }catch(e){
+    console.error(e);
+    alert('No se pudo guardar el gasto: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
-function removeExpense(id){
-  const trip = currentTrip();
-  trip.expenses = trip.expenses.filter(e=>e.id!==id);
-  render();
-  document.getElementById('results').innerHTML = '';
-  document.getElementById('pdfRow').style.display = 'none';
+async function removeExpense(id){
+  const exp = expenses.find(e=>e.id===id);
+  setBusy(true);
+  try{
+    const { error } = await sb.from('expenses').delete().eq('id', id);
+    if(error) throw error;
+    expenses = expenses.filter(e=>e.id!==id);
+    if(exp && exp.photo_url) deletePhotoBestEffort(exp.photo_url);
+    render();
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('pdfRow').style.display = 'none';
+  }catch(e){
+    console.error(e);
+    alert('No se pudo eliminar el gasto: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
 /* ---------- balances (all integer cents, no floating point drift) ---------- */
 function computeBalancesCents(){
-  const trip = currentTrip();
   const balance = {};
-  trip.travelers.forEach(t => balance[t.id] = 0);
+  travelers.forEach(t => balance[t.id] = 0);
 
-  trip.expenses.forEach(exp=>{
-    const shares = splitCents(exp.amountCents, exp.participants.length);
-    if(balance[exp.paidBy] !== undefined) balance[exp.paidBy] += exp.amountCents;
-    exp.participants.forEach((pid, idx)=>{
+  expenses.forEach(exp=>{
+    const parts = exp.participants || [];
+    if(parts.length === 0) return;
+    const shares = splitCents(exp.amount_cents, parts.length);
+    if(balance[exp.paid_by] !== undefined) balance[exp.paid_by] += exp.amount_cents;
+    parts.forEach((pid, idx)=>{
       if(balance[pid] !== undefined) balance[pid] -= shares[idx];
     });
   });
@@ -636,11 +800,8 @@ function simplifyDebtsCents(balance){
   return transfers;
 }
 
-let lastResults = null;
-
 function calculate(){
-  const trip = currentTrip();
-  if(trip.travelers.length === 0){
+  if(travelers.length === 0){
     document.getElementById('results').innerHTML = '<p class="empty-note">Añade viajeros y gastos primero.</p>';
     return;
   }
@@ -648,7 +809,7 @@ function calculate(){
   const transfers = simplifyDebtsCents(balance);
   lastResults = { balance, transfers };
 
-  const balancesHtml = `<div class="balances">` + trip.travelers.map(t=>{
+  const balancesHtml = `<div class="balances">` + travelers.map(t=>{
     const v = balance[t.id]||0;
     const cls = v > 0 ? 'pos' : (v < 0 ? 'neg' : 'zero');
     const label = v > 0 ? 'le deben' : (v < 0 ? 'debe' : 'en paz');
@@ -674,122 +835,139 @@ function calculate(){
   }
 
   document.getElementById('results').innerHTML = balancesHtml + transfersHtml;
-  document.getElementById('pdfRow').style.display = trip.expenses.length ? 'flex' : 'none';
+  document.getElementById('pdfRow').style.display = expenses.length ? 'flex' : 'none';
 }
 
 /* ---------- PDF export ---------- */
-function exportPDF(){
-  const trip = currentTrip();
+function urlToDataURL(url){
+  return fetch(url)
+    .then(res => res.blob())
+    .then(blob => new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onloadend = ()=>resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    }));
+}
+
+async function exportPDF(){
+  if(!currentTrip) return;
   if(!lastResults){ calculate(); }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  const tripTitle = trip.name || 'Cuentas de viaje';
+  setBusy(true);
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const tripTitle = currentTrip.name || 'Cuentas de viaje';
 
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(18);
-  doc.text(tripTitle, 14, 20);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.text('Generado el ' + new Date().toLocaleDateString('es-ES'), 14, 27);
-  doc.setTextColor(0);
-
-  const expenseRows = trip.expenses.map(e=>[
-    e.description,
-    fmt(e.amountCents),
-    nameOf(e.paidBy),
-    e.participants.map(nameOf).join(', ')
-  ]);
-
-  doc.autoTable({
-    startY: 34,
-    head: [['Descripción','Importe','Pagado por','Participantes']],
-    body: expenseRows.length ? expenseRows : [['(sin gastos)','','','']],
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [47,111,94] },
-    theme: 'striped'
-  });
-
-  const totalCents = trip.expenses.reduce((s,e)=>s+e.amountCents,0);
-  let y = doc.lastAutoTable.finalY + 10;
-  doc.setFont('helvetica','bold');
-  doc.text('Total del viaje: ' + fmt(totalCents), 14, y);
-  doc.setFont('helvetica','normal');
-  y += 10;
-
-  const balance = lastResults ? lastResults.balance : computeBalancesCents();
-  const balanceRows = trip.travelers.map(t=>{
-    const v = balance[t.id]||0;
-    const label = v>0 ? 'Le deben' : (v<0 ? 'Debe' : 'En paz');
-    return [t.name, label, fmt(Math.abs(v))];
-  });
-
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(12);
-  doc.text('Balance por viajero', 14, y);
-  y += 4;
-  doc.autoTable({
-    startY: y,
-    head: [['Viajero','Estado','Importe']],
-    body: balanceRows,
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [47,111,94] },
-    theme: 'striped'
-  });
-
-  y = doc.lastAutoTable.finalY + 10;
-  const transfers = lastResults ? lastResults.transfers : simplifyDebtsCents(balance);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(12);
-  doc.text('Liquidación sugerida', 14, y);
-  y += 4;
-
-  if(transfers.length === 0){
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(18);
+    doc.text(tripTitle, 14, 20);
     doc.setFont('helvetica','normal');
     doc.setFontSize(10);
-    doc.text('Todas las cuentas están saldadas.', 14, y + 6);
-    y += 12;
-  } else {
-    const transferRows = transfers.map(tr=>[nameOf(tr.from), nameOf(tr.to), fmt(tr.amount)]);
+    doc.setTextColor(100);
+    doc.text('Generado el ' + new Date().toLocaleDateString('es-ES'), 14, 27);
+    doc.setTextColor(0);
+
+    const expenseRows = expenses.map(e=>[
+      e.description,
+      fmt(e.amount_cents),
+      nameOf(e.paid_by),
+      (e.participants||[]).map(nameOf).join(', ')
+    ]);
+
     doc.autoTable({
-      startY: y,
-      head: [['Paga','Recibe','Importe']],
-      body: transferRows,
+      startY: 34,
+      head: [['Descripción','Importe','Pagado por','Participantes']],
+      body: expenseRows.length ? expenseRows : [['(sin gastos)','','','']],
       styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [201,138,44] },
+      headStyles: { fillColor: [47,111,94] },
       theme: 'striped'
     });
-    y = doc.lastAutoTable.finalY + 10;
-  }
 
-  // Ticket photos appendix
-  const withPhotos = trip.expenses.filter(e=>e.photo);
-  if(withPhotos.length){
-    doc.addPage();
+    const totalCents = expenses.reduce((s,e)=>s+e.amount_cents,0);
+    let y = doc.lastAutoTable.finalY + 10;
     doc.setFont('helvetica','bold');
-    doc.setFontSize(14);
-    doc.text('Fotos de tickets', 14, 20);
-    let py = 30;
-    const imgW = 80;
-    withPhotos.forEach((exp)=>{
-      if(py + 70 > 285){ doc.addPage(); py = 20; }
-      try{
-        doc.addImage(exp.photo, 'JPEG', 14, py, imgW, imgW*0.75);
-      }catch(e){}
+    doc.text('Total del viaje: ' + fmt(totalCents), 14, y);
+    doc.setFont('helvetica','normal');
+    y += 10;
+
+    const balance = lastResults ? lastResults.balance : computeBalancesCents();
+    const balanceRows = travelers.map(t=>{
+      const v = balance[t.id]||0;
+      const label = v>0 ? 'Le deben' : (v<0 ? 'Debe' : 'En paz');
+      return [t.name, label, fmt(Math.abs(v))];
+    });
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(12);
+    doc.text('Balance por viajero', 14, y);
+    y += 4;
+    doc.autoTable({
+      startY: y,
+      head: [['Viajero','Estado','Importe']],
+      body: balanceRows,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [47,111,94] },
+      theme: 'striped'
+    });
+
+    y = doc.lastAutoTable.finalY + 10;
+    const transfers = lastResults ? lastResults.transfers : simplifyDebtsCents(balance);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(12);
+    doc.text('Liquidación sugerida', 14, y);
+    y += 4;
+
+    if(transfers.length === 0){
       doc.setFont('helvetica','normal');
       doc.setFontSize(10);
-      doc.text(`${exp.description} — ${fmt(exp.amountCents)}`, 14 + imgW + 8, py + 10);
-      py += imgW*0.75 + 12;
-    });
-  }
+      doc.text('Todas las cuentas están saldadas.', 14, y + 6);
+      y += 12;
+    } else {
+      const transferRows = transfers.map(tr=>[nameOf(tr.from), nameOf(tr.to), fmt(tr.amount)]);
+      doc.autoTable({
+        startY: y,
+        head: [['Paga','Recibe','Importe']],
+        body: transferRows,
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [201,138,44] },
+        theme: 'striped'
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    }
 
-  const safeName = (trip.name || 'cuentas-viaje').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
-  doc.save(`${safeName || 'cuentas-viaje'}.pdf`);
+    // Ticket photos appendix
+    const withPhotos = expenses.filter(e=>e.photo_url);
+    if(withPhotos.length){
+      doc.addPage();
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(14);
+      doc.text('Fotos de tickets', 14, 20);
+      let py = 30;
+      const imgW = 80;
+      for(const exp of withPhotos){
+        if(py + 70 > 285){ doc.addPage(); py = 20; }
+        try{
+          const dataUrl = await urlToDataURL(exp.photo_url);
+          doc.addImage(dataUrl, 'JPEG', 14, py, imgW, imgW*0.75);
+        }catch(e){ /* si falla una foto, seguimos con las demás */ }
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(10);
+        doc.text(`${exp.description} — ${fmt(exp.amount_cents)}`, 14 + imgW + 8, py + 10);
+        py += imgW*0.75 + 12;
+      }
+    }
+
+    const safeName = (currentTrip.name || 'cuentas-viaje').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+    doc.save(`${safeName || 'cuentas-viaje'}.pdf`);
+  }catch(e){
+    console.error(e);
+    alert('No se pudo generar el PDF: ' + e.message);
+  }finally{ setBusy(false); }
 }
 
 /* ---------- init ---------- */
-load();
-render();
+init();
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load', ()=>{
