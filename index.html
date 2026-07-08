@@ -104,7 +104,7 @@
   .chip button:hover{background:var(--red);color:#fff;}
   .empty-note{color:var(--ink-soft);font-size:13px;font-style:italic;}
 
-  input[type=text],input[type=number],input[type=password],select{
+  input[type=text],input[type=number],select{
     font-family:'Inter',sans-serif;font-size:16px;
     padding:10px 12px;border:1px solid var(--border);border-radius:8px;
     background:#fff;color:var(--ink);width:100%;
@@ -224,7 +224,29 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div id="authScreen" style="min-height:80vh;display:flex;align-items:center;justify-content:center;">
+  <div class="card" style="width:100%;max-width:400px;">
+    <h2 id="authTitle">Iniciar sesión</h2>
+    <p class="hint">Entra para ver y compartir tus viajes.</p>
+    <div id="authError" class="empty-note" style="display:none;margin-bottom:14px;"></div>
+    <label class="field-label">Email</label>
+    <input type="email" id="authEmail" placeholder="tú@email.com" style="margin-bottom:12px;" autocomplete="email">
+    <label class="field-label">Contraseña</label>
+    <input type="password" id="authPassword" placeholder="••••••••" style="margin-bottom:18px;" autocomplete="current-password">
+    <button class="btn wide" id="authSubmitBtn" onclick="handleAuthSubmit()">Entrar</button>
+    <p style="text-align:center;font-size:13px;margin-top:16px;">
+      <a href="#" id="authToggleLink" onclick="toggleAuthMode();return false;">¿No tienes cuenta? Regístrate</a>
+    </p>
+  </div>
+</div>
+
+<div id="appScreen" class="wrap" style="display:none;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;">
+    <span id="userEmailLabel" style="font-size:12px;color:var(--ink-soft);overflow-wrap:anywhere;"></span>
+    <button class="icon-btn" onclick="logout()">Salir</button>
+  </div>
 
   <header>
     <div class="eyebrow">
@@ -235,14 +257,20 @@
     <div class="trip-bar">
       <select id="tripSelect" onchange="switchTrip(this.value)" disabled></select>
       <button class="icon-btn" onclick="newTrip()">+ Nuevo viaje</button>
+      <button class="icon-btn" onclick="showInvite()">Invitar</button>
       <button class="icon-btn" onclick="renameTrip()">Renombrar</button>
       <button class="icon-btn danger" onclick="deleteTrip()">Eliminar</button>
+    </div>
+    <div class="trip-bar" style="margin-top:8px;">
+      <input type="text" id="joinCodeInput" placeholder="Código de invitación">
+      <button class="icon-btn" onclick="joinTripByCode()">Unirme</button>
     </div>
   </header>
 
   <section class="card">
     <h2>Viajeros</h2>
     <p class="hint">Añade a todas las personas que participan en este viaje.</p>
+
     <div class="traveler-add">
       <input id="travelerInput" type="text" placeholder="Nombre del viajero">
       <button class="btn" onclick="addTraveler()">Añadir</button>
@@ -298,18 +326,6 @@
     </div>
   </section>
 
-  <section class="card" id="settingsCard">
-    <h2>⚙️ Configuración</h2>
-    <p class="hint" id="settingsHint">Protege con contraseña la eliminación de viajes y gastos.</p>
-    <label class="field-label" id="currentPassLabel" style="display:none;">Contraseña actual</label>
-    <input type="password" id="currentPasswordInput" placeholder="Contraseña actual" style="display:none;margin-bottom:10px;" autocomplete="off">
-    <label class="field-label">Nueva contraseña</label>
-    <input type="password" id="newPasswordInput" placeholder="Nueva contraseña" style="margin-bottom:10px;" autocomplete="off">
-    <label class="field-label">Confirmar nueva contraseña</label>
-    <input type="password" id="confirmPasswordInput" placeholder="Repite la contraseña" style="margin-bottom:14px;" autocomplete="off">
-    <button class="btn" onclick="savePassword()">Guardar contraseña</button>
-  </section>
-
   <footer>Los datos de este viaje se guardan en Supabase (incluidas las fotos de los tickets), no solo en este dispositivo.</footer>
 </div>
 
@@ -326,7 +342,8 @@ const SUPABASE_URL = 'https://edhjylauvxcbrevgzpjw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkaGp5bGF1dnhjYnJldmd6cGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjUzMjIsImV4cCI6MjA5ODQ0MTMyMn0.U0nyuHvjD1t9uEsxcofpx1mKmA5PfycISqYTWfmToW8';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const LAST_TRIP_KEY = 'cuentas-viaje-last-trip-id';
+const LAST_TRIP_KEY_BASE = 'cuentas-viaje-last-trip-id';
+function lastTripKey(){ return currentUser ? `${LAST_TRIP_KEY_BASE}:${currentUser.id}` : LAST_TRIP_KEY_BASE; }
 const BUCKET = 'ticket-photos';
 
 /* ---------- estado en memoria ---------- */
@@ -339,7 +356,6 @@ let pendingPhotoDataUrl = null;
 let lastResults = null;
 let realtimeChannel = null;
 let busyCount = 0;
-let appSettings = { password_hash: null }; // fila única en app_settings, protege borrado de viajes y gastos
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
@@ -385,86 +401,117 @@ function splitCents(totalCents, n){
   return shares;
 }
 
-/* ---------- contraseña de borrado (hash SHA-256, nunca se guarda en texto plano) ---------- */
-async function sha256Hex(text){
-  const enc = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(hashBuffer)).map(b=>b.toString(16).padStart(2,'0')).join('');
+/* ---------- autenticación ---------- */
+let currentUser = null;
+let authMode = 'login'; // 'login' | 'signup'
+let pendingJoinCode = getPendingJoinCodeFromUrl();
+
+function getPendingJoinCodeFromUrl(){
+  const params = new URLSearchParams(location.search);
+  const code = params.get('join');
+  if(code) history.replaceState({}, '', location.pathname);
+  return code;
 }
 
-async function loadSettings(){
-  const { data, error } = await sb.from('app_settings').select('*').eq('id', 1).maybeSingle();
-  if(error) throw error;
-  if(!data){
-    const { data: created, error: cErr } = await sb.from('app_settings').insert({ id: 1, password_hash: null }).select().single();
-    if(cErr) throw cErr;
-    appSettings = created;
-  } else {
-    appSettings = data;
+function showAuthScreen(){
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('appScreen').style.display = 'none';
+}
+
+function showAppScreen(){
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+}
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('authTitle').textContent = authMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta';
+  document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Entrar' : 'Registrarme';
+  document.getElementById('authToggleLink').textContent = authMode === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión';
+  document.getElementById('authError').style.display = 'none';
+}
+
+async function handleAuthSubmit(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  errEl.style.display = 'none';
+  if(!email || !password){
+    errEl.style.color = 'var(--red)';
+    errEl.textContent = 'Escribe email y contraseña.';
+    errEl.style.display = 'block';
+    return;
   }
-  renderSettings();
-}
-
-function renderSettings(){
-  const hasPassword = !!(appSettings && appSettings.password_hash);
-  document.getElementById('settingsHint').textContent = hasPassword
-    ? 'Ya tienes una contraseña puesta para borrar viajes y gastos. Introduce la actual para cambiarla.'
-    : 'Todavía no has puesto contraseña: cualquiera con el enlace podrá eliminar viajes y gastos hasta que la configures.';
-  document.getElementById('currentPasswordInput').style.display = hasPassword ? 'block' : 'none';
-  document.getElementById('currentPassLabel').style.display = hasPassword ? 'block' : 'none';
-}
-
-async function savePassword(){
-  const hasPassword = !!(appSettings && appSettings.password_hash);
-  const current = document.getElementById('currentPasswordInput').value;
-  const next = document.getElementById('newPasswordInput').value;
-  const confirmVal = document.getElementById('confirmPasswordInput').value;
-
-  if(hasPassword){
-    if(!current){ alert('Introduce la contraseña actual.'); return; }
-    const hash = await sha256Hex(current);
-    if(hash !== appSettings.password_hash){ alert('La contraseña actual no es correcta.'); return; }
+  const btn = document.getElementById('authSubmitBtn');
+  btn.disabled = true;
+  try{
+    if(authMode === 'login'){
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+    } else {
+      const { error } = await sb.auth.signUp({ email, password });
+      if(error) throw error;
+      errEl.style.color = 'var(--teal-deep)';
+      errEl.textContent = 'Cuenta creada. Si tu proyecto pide confirmación por email, revisa tu bandeja de entrada antes de entrar.';
+      errEl.style.display = 'block';
+    }
+  }catch(e){
+    errEl.style.color = 'var(--red)';
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }finally{
+    btn.disabled = false;
   }
-  if(!next || next.length < 4){ alert('La nueva contraseña debe tener al menos 4 caracteres.'); return; }
-  if(next !== confirmVal){ alert('Las dos contraseñas no coinciden.'); return; }
+}
 
+async function logout(){
+  await sb.auth.signOut();
+}
+
+/* ---------- unirse a un viaje por código ---------- */
+async function joinTripByCode(explicitCode){
+  const codeInput = document.getElementById('joinCodeInput');
+  const code = (explicitCode || (codeInput ? codeInput.value : '')).trim();
+  if(!code){ return; }
   setBusy(true);
   try{
-    const newHash = await sha256Hex(next);
-    const { data, error } = await sb.from('app_settings').update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq('id', 1).select().single();
+    const { data: joined, error } = await sb.rpc('join_trip_by_code', { p_code: code });
     if(error) throw error;
-    appSettings = data;
-    document.getElementById('currentPasswordInput').value = '';
-    document.getElementById('newPasswordInput').value = '';
-    document.getElementById('confirmPasswordInput').value = '';
-    renderSettings();
-    alert('Contraseña guardada correctamente.');
+    if(codeInput) codeInput.value = '';
+
+    const { data: allTrips, error: tErr } = await sb.from('trips').select('*').order('created_at', { ascending: true });
+    if(tErr) throw tErr;
+    trips = allTrips || [];
+    document.getElementById('tripSelect').disabled = false;
+    await switchTrip(joined.id);
   }catch(e){
     console.error(e);
-    alert('No se pudo guardar la contraseña: ' + e.message);
+    alert('No se pudo unir al viaje: ' + (e.message || e));
   }finally{ setBusy(false); }
 }
 
-async function requirePassword(actionLabel){
-  if(!appSettings || !appSettings.password_hash){
-    alert('Antes de poder eliminar, ve a Configuración y establece una contraseña.');
-    return false;
+function showInvite(){
+  if(!currentTrip) return;
+  const link = `${location.origin}${location.pathname}?join=${currentTrip.join_code}`;
+  const text = `Únete a "${currentTrip.name}" en Cuentas de Viaje.\nCódigo: ${currentTrip.join_code}\nEnlace: ${link}`;
+  if(navigator.share){
+    navigator.share({ title: 'Únete a mi viaje', text, url: link }).catch(()=>{});
+  } else {
+    prompt('Comparte este código o enlace con quien quieras invitar:', text);
   }
-  const entered = prompt(`Introduce la contraseña para ${actionLabel}:`);
-  if(entered === null) return false;
-  const hash = await sha256Hex(entered);
-  if(hash !== appSettings.password_hash){
-    alert('Contraseña incorrecta.');
-    return false;
-  }
-  return true;
 }
 
 /* ---------- carga inicial ---------- */
 async function init(){
   setStatus('Cuentas de viaje · conectando…', 'busy');
+  document.getElementById('userEmailLabel').textContent = currentUser ? currentUser.email : '';
   try{
-    await loadSettings();
+    if(pendingJoinCode){
+      const code = pendingJoinCode;
+      pendingJoinCode = null;
+      await joinTripByCode(code);
+      return;
+    }
 
     const { data, error } = await sb.from('trips').select('*').order('created_at', { ascending: true });
     if(error) throw error;
@@ -476,7 +523,7 @@ async function init(){
       trips = [created];
     }
 
-    const lastId = localStorage.getItem(LAST_TRIP_KEY);
+    const lastId = localStorage.getItem(lastTripKey());
     const initialId = trips.some(t=>t.id===lastId) ? lastId : trips[0].id;
     document.getElementById('tripSelect').disabled = false;
     await switchTrip(initialId);
@@ -600,7 +647,7 @@ function toggleParticipantStyle(id){
 
 /* ---------- trips ---------- */
 async function switchTrip(id){
-  localStorage.setItem(LAST_TRIP_KEY, id);
+  localStorage.setItem(lastTripKey(), id);
   document.getElementById('results').innerHTML = '';
   document.getElementById('pdfRow').style.display = 'none';
   clearPendingPhoto();
@@ -644,12 +691,14 @@ async function renameTrip(){
 async function deleteTrip(){
   if(!currentTrip) return;
   if(!confirm(`¿Eliminar "${currentTrip.name}" y todos sus gastos? Esta acción no se puede deshacer.`)) return;
-  if(!(await requirePassword('eliminar este viaje'))) return;
   setBusy(true);
   try{
     const deletedId = currentTrip.id;
-    const { error } = await sb.from('trips').delete().eq('id', deletedId);
+    const { data: deletedRows, error } = await sb.from('trips').delete().eq('id', deletedId).select();
     if(error) throw error;
+    if(!deletedRows || deletedRows.length === 0){
+      throw new Error('Solo la persona que creó el viaje puede eliminarlo.');
+    }
     trips = trips.filter(t=>t.id!==deletedId);
     currentTrip = null;
 
@@ -833,7 +882,6 @@ async function addExpense(){
 }
 
 async function removeExpense(id){
-  if(!(await requirePassword('eliminar este gasto'))) return;
   const exp = expenses.find(e=>e.id===id);
   setBusy(true);
   try{
@@ -1059,7 +1107,16 @@ async function exportPDF(){
 }
 
 /* ---------- init ---------- */
-init();
+sb.auth.onAuthStateChange((_event, session) => {
+  if(session && session.user){
+    currentUser = session.user;
+    showAppScreen();
+    init();
+  } else {
+    currentUser = null;
+    showAuthScreen();
+  }
+});
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load', ()=>{
