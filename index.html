@@ -408,6 +408,35 @@ function setBusy(isBusy){
   }
 }
 
+/* ---------- valida/refresca la sesión antes de cualquier escritura ----------
+   getSession() de supabase-js refresca el token si ha caducado pero aún hay
+   un refresh_token válido. Si no hay sesión utilizable, mandamos a la
+   persona de vuelta al login con un mensaje claro en vez de un error críptico. */
+async function ensureFreshSession(){
+  try{
+    const { data, error } = await sb.auth.getSession();
+    if(error || !data.session){
+      currentUser = null;
+      showAuthScreen();
+      alert('Tu sesión ha caducado. Vuelve a iniciar sesión y prueba otra vez.');
+      return false;
+    }
+    currentUser = data.session.user;
+    return true;
+  }catch(e){
+    console.error(e);
+    return false;
+  }
+}
+
+function friendlyErrorMessage(e){
+  const msg = (e && e.message) || String(e);
+  if(msg.includes('row-level security')){
+    return 'Tu sesión puede haber caducado. Cierra sesión (botón "Salir"), vuelve a entrar y pruébalo de nuevo.';
+  }
+  return msg;
+}
+
 /* ---------- rounding-safe splitting, all math in integer cents ---------- */
 function splitCents(totalCents, n){
   const base = Math.floor(totalCents / n);
@@ -566,6 +595,7 @@ function showInvite(){
 async function init(){
   setStatus('Cuentas de viaje · conectando…', 'busy');
   document.getElementById('userEmailLabel').textContent = currentUser ? currentUser.email : '';
+  if(!(await ensureFreshSession())) return;
   try{
     if(pendingJoinCode){
       const code = pendingJoinCode;
@@ -727,13 +757,14 @@ async function newTrip(){
   if(name === null) return;
   setBusy(true);
   try{
+    if(!(await ensureFreshSession())){ setBusy(false); return; }
     const { data, error } = await sb.from('trips').insert({ name: name.trim() || 'Viaje sin nombre' }).select().single();
     if(error) throw error;
     trips.push(data);
     await switchTrip(data.id);
   }catch(e){
     console.error(e);
-    alert('No se pudo crear el viaje: ' + e.message);
+    alert('No se pudo crear el viaje: ' + friendlyErrorMessage(e));
   }finally{ setBusy(false); }
 }
 
@@ -812,6 +843,7 @@ async function addTraveler(){
   if(!name) return;
   setBusy(true);
   try{
+    if(!(await ensureFreshSession())){ setBusy(false); return; }
     const { data, error } = await sb.from('travelers').insert({ trip_id: currentTrip.id, name }).select().single();
     if(error) throw error;
     travelers.push(data);
@@ -819,7 +851,7 @@ async function addTraveler(){
     render();
   }catch(e){
     console.error(e);
-    alert('No se pudo añadir el viajero: ' + e.message);
+    alert('No se pudo añadir el viajero: ' + friendlyErrorMessage(e));
   }finally{ setBusy(false); }
 }
 
@@ -945,6 +977,7 @@ async function addExpense(){
 
   setBusy(true);
   try{
+    if(!(await ensureFreshSession())){ setBusy(false); return; }
     let photoUrl = null;
     if(pendingPhotoBlob) photoUrl = await uploadPendingPhoto();
 
@@ -967,7 +1000,7 @@ async function addExpense(){
     document.getElementById('pdfRow').style.display = 'none';
   }catch(e){
     console.error(e);
-    alert('No se pudo guardar el gasto: ' + e.message);
+    alert('No se pudo guardar el gasto: ' + friendlyErrorMessage(e));
   }finally{ setBusy(false); }
 }
 
