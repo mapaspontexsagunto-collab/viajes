@@ -233,7 +233,11 @@
     <label class="field-label">Email</label>
     <input type="email" id="authEmail" placeholder="tú@email.com" style="margin-bottom:12px;" autocomplete="email">
     <label class="field-label">Contraseña</label>
-    <input type="password" id="authPassword" placeholder="••••••••" style="margin-bottom:18px;" autocomplete="current-password">
+    <input type="password" id="authPassword" placeholder="••••••••" style="margin-bottom:12px;" autocomplete="current-password">
+    <div id="authConfirmWrap" style="display:none;margin-bottom:18px;">
+      <label class="field-label">Repite la contraseña</label>
+      <input type="password" id="authPasswordConfirm" placeholder="••••••••" autocomplete="new-password">
+    </div>
     <button class="btn wide" id="authSubmitBtn" onclick="handleAuthSubmit()">Entrar</button>
     <p style="text-align:center;font-size:13px;margin-top:16px;">
       <a href="#" id="authToggleLink" onclick="toggleAuthMode();return false;">¿No tienes cuenta? Regístrate</a>
@@ -257,9 +261,13 @@
 
 <div id="appScreen" class="wrap" style="display:none;">
 
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
     <span id="userEmailLabel" style="font-size:12px;color:var(--ink-soft);overflow-wrap:anywhere;"></span>
-    <button class="icon-btn" onclick="logout()">Salir</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="icon-btn" onclick="showDiagnostics()">Diagnóstico</button>
+      <button class="icon-btn" onclick="openChangePasswordModal()">Cambiar contraseña</button>
+      <button class="icon-btn" onclick="logout()">Salir</button>
+    </div>
   </div>
 
   <header>
@@ -349,6 +357,20 @@
   <img id="photoModalImg" src="">
 </div>
 
+<div class="modal-overlay" id="changePasswordModal" onclick="closeChangePasswordModal(event)">
+  <div class="card" style="width:100%;max-width:380px;" onclick="event.stopPropagation()">
+    <h2>Cambiar contraseña</h2>
+    <p class="hint">Escribe tu nueva contraseña dos veces para confirmarla.</p>
+    <div id="cpError" class="empty-note" style="display:none;margin-bottom:14px;color:var(--red);"></div>
+    <label class="field-label">Nueva contraseña</label>
+    <input type="password" id="cpNew" placeholder="••••••••" style="margin-bottom:12px;" autocomplete="new-password">
+    <label class="field-label">Repite la contraseña</label>
+    <input type="password" id="cpConfirm" placeholder="••••••••" style="margin-bottom:18px;" autocomplete="new-password">
+    <button class="btn wide" onclick="submitChangePassword()">Guardar nueva contraseña</button>
+    <button class="icon-btn" style="width:100%;margin-top:8px;justify-content:center;" onclick="closeChangePasswordModal()">Cancelar</button>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    Conexión a Supabase
@@ -429,6 +451,24 @@ async function ensureFreshSession(){
   }
 }
 
+async function showDiagnostics(){
+  try{
+    const { data, error } = await sb.auth.getSession();
+    const s = data && data.session;
+    if(!s){
+      alert('SIN sesión activa en el cliente.' + (error ? ('\nError: ' + error.message) : ''));
+      return;
+    }
+    const expiresAt = new Date(s.expires_at * 1000);
+    const expired = expiresAt.getTime() < Date.now();
+    const info = `Usuario: ${s.user.email}\nID: ${s.user.id}\nToken caduca: ${expiresAt.toLocaleString('es-ES')}${expired ? '  ⚠️ YA HA CADUCADO' : '  (vigente)'}\nInicio del token: ${s.access_token.slice(0,24)}…`;
+    console.log('Diagnóstico de sesión', s);
+    alert(info);
+  }catch(e){
+    alert('Error obteniendo diagnóstico: ' + e.message);
+  }
+}
+
 function friendlyErrorMessage(e){
   const msg = (e && e.message) || String(e);
   if(msg.includes('row-level security')){
@@ -482,6 +522,7 @@ function toggleAuthMode(){
   document.getElementById('authTitle').textContent = authMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta';
   document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Entrar' : 'Registrarme';
   document.getElementById('authToggleLink').textContent = authMode === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión';
+  document.getElementById('authConfirmWrap').style.display = authMode === 'signup' ? 'block' : 'none';
   document.getElementById('authError').style.display = 'none';
 }
 
@@ -495,6 +536,21 @@ async function handleAuthSubmit(){
     errEl.textContent = 'Escribe email y contraseña.';
     errEl.style.display = 'block';
     return;
+  }
+  if(authMode === 'signup'){
+    const confirmPw = document.getElementById('authPasswordConfirm').value;
+    if(password.length < 6){
+      errEl.style.color = 'var(--red)';
+      errEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if(password !== confirmPw){
+      errEl.style.color = 'var(--red)';
+      errEl.textContent = 'Las dos contraseñas no coinciden.';
+      errEl.style.display = 'block';
+      return;
+    }
   }
   const btn = document.getElementById('authSubmitBtn');
   btn.disabled = true;
@@ -554,6 +610,46 @@ async function handleSetNewPassword(){
     init();
   }catch(e){
     errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+/* ---------- cambiar contraseña desde el menú (ya logueado) ---------- */
+function openChangePasswordModal(){
+  document.getElementById('cpNew').value = '';
+  document.getElementById('cpConfirm').value = '';
+  document.getElementById('cpError').style.display = 'none';
+  document.getElementById('changePasswordModal').classList.add('open');
+}
+
+function closeChangePasswordModal(event){
+  if(!event || event.target.id === 'changePasswordModal' || event.target.classList.contains('close-modal')){
+    document.getElementById('changePasswordModal').classList.remove('open');
+  }
+}
+
+async function submitChangePassword(){
+  const pw = document.getElementById('cpNew').value;
+  const confirmPw = document.getElementById('cpConfirm').value;
+  const errEl = document.getElementById('cpError');
+  errEl.style.display = 'none';
+  if(!pw || pw.length < 6){
+    errEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if(pw !== confirmPw){
+    errEl.textContent = 'Las dos contraseñas no coinciden.';
+    errEl.style.display = 'block';
+    return;
+  }
+  try{
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if(error) throw error;
+    document.getElementById('changePasswordModal').classList.remove('open');
+    alert('Contraseña actualizada correctamente.');
+  }catch(e){
+    errEl.textContent = friendlyErrorMessage(e);
     errEl.style.display = 'block';
   }
 }
