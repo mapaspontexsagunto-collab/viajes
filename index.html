@@ -892,6 +892,16 @@ async function removeExpense(id){
 }
 
 /* ---------- balances (all integer cents, no floating point drift) ---------- */
+/* Reparte un importe en céntimos entre n participantes sin perder ni
+   ganar céntimos: los primeros `remainder` participantes absorben el sobrante. */
+function splitCents(totalCents, n){
+  const base = Math.floor(totalCents / n);
+  const remainder = totalCents - base * n;
+  const shares = new Array(n).fill(base);
+  for(let i=0;i<remainder;i++) shares[i] += 1;
+  return shares;
+}
+
 function computeBalancesCents(){
   const balance = {};
   travelers.forEach(t => balance[t.id] = 0);
